@@ -6,6 +6,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -17,7 +18,8 @@ import java.time.LocalDateTime;
 
 /** Immutable-by-convention record of an accepted flash-sale order. */
 @Entity
-@Table(name = "orders")
+@Table(name = "orders", uniqueConstraints = @UniqueConstraint(
+        name = "uk_orders_voucher_user", columnNames = {"user_id", "voucher_code"}))
 @Getter
 @Setter
 @NoArgsConstructor
@@ -43,6 +45,15 @@ public class Order {
 
     @Column(nullable = false, precision = 19, scale = 2)
     private BigDecimal totalAmount;
+
+    @Column(length = 100, updatable = false)
+    private String voucherCode;
+
+    @Column(nullable = false, precision = 19, scale = 2)
+    private BigDecimal discountAmount;
+
+    @Column(nullable = false, precision = 19, scale = 2)
+    private BigDecimal finalAmount;
 
     @Column(nullable = false, length = 16)
     private String status;

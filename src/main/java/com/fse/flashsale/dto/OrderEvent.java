@@ -24,4 +24,5 @@ public class OrderEvent implements Serializable {
     private Long userId;
     private Long productId;
     private Integer quantity;
+    private String voucherCode;
 }

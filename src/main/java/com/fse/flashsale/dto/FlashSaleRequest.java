@@ -8,6 +8,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import jakarta.validation.constraints.Size;
+
 /** Validated API payload for reserving flash-sale inventory. */
 @Getter
 @Setter
@@ -24,7 +26,10 @@ public class FlashSaleRequest {
     @Positive
     private Long userId;
 
-    @NotNull
+    @Builder.Default
     @Positive
-    private Integer quantity;
+    private Integer quantity = 1;
+
+    @Size(max = 100)
+    private String voucherCode;
 }

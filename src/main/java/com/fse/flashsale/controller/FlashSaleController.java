@@ -16,42 +16,55 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
 
-/** HTTP adapter for the flash-sale reservation workflow. */
+/** Hot-path HTTP adapter. Database writes are intentionally delegated to Kafka. */
 @RestController
 @RequestMapping("/api/v1/flash-sale")
 public class FlashSaleController {
+    private final RedisStockService redis;
+    private final OrderProducer producer;
 
-    private final RedisStockService redisStockService;
-    private final OrderProducer orderProducer;
-
-    public FlashSaleController(RedisStockService redisStockService, OrderProducer orderProducer) {
-        this.redisStockService = redisStockService;
-        this.orderProducer = orderProducer;
+    public FlashSaleController(RedisStockService redis, OrderProducer producer) {
+        this.redis = redis;
+        this.producer = producer;
     }
 
     @PostMapping("/init-stock")
     public ResponseEntity<Void> initStock(@Valid @RequestBody InitStockRequest request) {
-        redisStockService.initStock(request.getProductId(), request.getStock());
+        redis.initStock(request.getProductId(), request.getStock());
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/order")
     public ResponseEntity<?> placeOrder(@Valid @RequestBody FlashSaleRequest request) {
-        long result = redisStockService.deductStock(request.getProductId(), request.getQuantity());
-        if (result != 1L) {
-            String message = result == -1L ? "Product stock has not been initialized" : "Product is out of stock";
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(message);
+        String voucherCode = normalize(request.getVoucherCode());
+        long reservation = redis.reserve(request.getProductId(), request.getUserId(), request.getQuantity(), voucherCode);
+        if (reservation != RedisStockService.RESERVED_WITH_VOUCHER
+                && reservation != RedisStockService.RESERVED_WITHOUT_VOUCHER) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(failureMessage(reservation));
         }
 
         String orderCode = "FS-" + UUID.randomUUID();
-        orderProducer.publish(OrderEvent.builder()
+        producer.publish(OrderEvent.builder()
                 .orderCode(orderCode)
-                .userId(request.getUserId())
                 .productId(request.getProductId())
+                .userId(request.getUserId())
                 .quantity(request.getQuantity())
+                .voucherCode(voucherCode)
                 .build());
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(new OrderAcceptedResponse(orderCode));
+    }
 
-        return ResponseEntity.status(HttpStatus.ACCEPTED)
-                .body(new OrderAcceptedResponse(orderCode));
+    private String failureMessage(long code) {
+        return switch ((int) code) {
+            case 0 -> "Out of stock";
+            case -1 -> "Voucher expired";
+            case -2 -> "Voucher already redeemed";
+            case -3 -> "Invalid product or voucher";
+            default -> "Unable to reserve order resources";
+        };
+    }
+
+    private String normalize(String code) {
+        return code == null || code.isBlank() ? null : code.trim();
     }
 }

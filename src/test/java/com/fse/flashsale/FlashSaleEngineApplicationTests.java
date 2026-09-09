@@ -1,4 +1,4 @@
-package com.datnong.flashsale;
+package com.fse.flashsale;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
